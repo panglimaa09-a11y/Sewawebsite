@@ -18,7 +18,7 @@ type Message = {
   sender_id: string;
   is_staff: boolean;
   body: string;
-  attachments: { url: string }[];
+  attachments: { url: string | null }[];
   created_at: string;
 };
 type PendingPayment = {
@@ -130,9 +130,9 @@ export default function TicketsClient({
                       {msgs.map((m) => (
                         <div key={m.id} className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${m.is_staff ? 'self-end bg-neon-cyan/10' : 'self-start bg-white/5'}`}>
                           <p className="whitespace-pre-wrap">{m.body}</p>
-                          {m.attachments?.length > 0 && (
+                          {m.attachments?.[0]?.url && (
                             <a href={m.attachments[0].url} target="_blank" rel="noreferrer" className="mt-1 block text-xs text-neon-cyan underline">
-                              Lihat lampiran
+                              Lihat bukti pembayaran
                             </a>
                           )}
                           <p className="mt-1 text-[10px] text-dim">

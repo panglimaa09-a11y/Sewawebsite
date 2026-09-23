@@ -135,3 +135,11 @@ invoice, tempel URL gambar bukti). Alur admin: `/admin/tickets` → panel
 Saat gateway provider nanti diaktifkan, webhook `route.ts` yang ada tetap
 kompatibel (gateway_ref unik); cukup kembalikan create_checkout ke gateway
 provider + buat Snap/Invoice URL.
+
+### Upload Bukti Pembayaran ke Storage (PRD #43)
+
+Migrasi `00007_proof_storage.sql`: bucket private `proofs` (maks 5MB,
+PNG/JPG/WebP) + RLS storage policy — user hanya bisa upload/baca/hapus di
+folder `{user_id}/…`, staff bisa membaca semua untuk verifikasi. Upload
+langsung dari browser (`/app/support`), path disimpan di lampiran tiket;
+user & admin melihat bukti via signed URL 1 jam yang dibuat server-side.

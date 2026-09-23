@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
 import { createTicket, sendTicketMessage, type ActionState } from '@/lib/support-actions';
 
 type Ticket = { id: string; subject: string; category: string; status: string; created_at: string };
@@ -10,7 +11,7 @@ type Message = {
   sender_id: string;
   is_staff: boolean;
   body: string;
-  attachments: { url: string }[];
+  attachments: { url: string | null }[];
   created_at: string;
 };
 
@@ -42,6 +43,34 @@ export default function SupportClient({
   const [openId, setOpenId] = useState<string | null>(tickets[0]?.id ?? null);
   const [newState, newAction] = useActionState<ActionState | null, FormData>(createTicket, null);
   const [msgState, msgAction] = useActionState<ActionState | null, FormData>(sendTicketMessage, null);
+
+  // upload bukti ke Supabase Storage (bucket 'proofs', folder milik user)
+  const [proof, setProof] = useState<{ path: string; name: string } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [upErr, setUpErr] = useState<string | null>(null);
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setUpErr(null);
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(f.type)) {
+      setUpErr('Format harus PNG, JPG, atau WebP.');
+      return;
+    }
+    if (f.size > 5 * 1024 * 1024) {
+      setUpErr('Ukuran maksimal 5MB.');
+      return;
+    }
+    setUploading(true);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setUploading(false); setUpErr('Sesi berakhir — masuk kembali.'); return; }
+    const path = `${user.id}/${Date.now()}-${f.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const { error } = await supabase.storage.from('proofs').upload(path, f, { contentType: f.type });
+    setUploading(false);
+    if (error) { setUpErr(error.message); return; }
+    setProof({ path, name: f.name });
+  }
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
@@ -78,9 +107,9 @@ export default function SupportClient({
                       {msgs.map((m) => (
                         <div key={m.id} className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${m.is_staff ? 'self-end bg-neon-cyan/10' : 'self-start bg-white/5'}`}>
                           <p className="whitespace-pre-wrap">{m.body}</p>
-                          {m.attachments?.length > 0 && (
+                          {m.attachments?.[0]?.url && (
                             <a href={m.attachments[0].url} target="_blank" rel="noreferrer" className="mt-1 block text-xs text-neon-cyan underline">
-                              Lihat lampiran (bukti pembayaran)
+                              Lihat bukti pembayaran
                             </a>
                           )}
                           <p className="mt-1 text-[10px] text-dim">
@@ -123,13 +152,28 @@ export default function SupportClient({
         </div>
         <div className="mb-3">
           <label className={labelCls} htmlFor="message">Pesan</label>
-          <textarea id="message" name="message" rows={4} placeholder="Jelaskan kebutuhan Anda. Untuk pembayaran manual: tulis nominal + tanggal transfer, lalu tempel tautan gambar bukti di kolom lampiran." className={`${inputCls} leading-relaxed`} required minLength={5} />
+          <textarea id="message" name="message" rows={4} placeholder="Jelaskan kebutuhan Anda. Untuk pembayaran manual: tulis nominal + tanggal transfer." className={`${inputCls} leading-relaxed`} required minLength={5} />
         </div>
         <div className="mb-4">
-          <label className={labelCls} htmlFor="attachment_url">Tautan bukti (URL gambar, opsional)</label>
-          <input id="attachment_url" name="attachment_url" type="url" placeholder="https://…/bukti-transfer.jpg" className={inputCls} />
+          <label className={labelCls} htmlFor="proof">Bukti pembayaran (PNG/JPG/WebP, maks 5MB)</label>
+          <input
+            id="proof"
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={onFile}
+            className="w-full cursor-pointer rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-xs text-muted file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-neon-cyan/10 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-neon-cyan"
+          />
+          {uploading && <p className="mt-1.5 text-xs text-dim">Mengunggah…</p>}
+          {upErr && <p className="mt-1.5 text-xs text-rose-400">{upErr}</p>}
+          {proof && (
+            <div className="mt-2 flex items-center justify-between rounded-xl border border-neon-mint/30 bg-neon-mint/5 px-3 py-2 text-xs">
+              <span className="truncate text-neon-mint">{proof.name}</span>
+              <button type="button" onClick={() => setProof(null)} className="ml-2 shrink-0 text-dim hover:text-rose-300">Hapus</button>
+            </div>
+          )}
+          <input type="hidden" name="attachment_path" value={proof?.path ?? ''} />
         </div>
-        <button className="w-full rounded-xl bg-gradient-to-r from-neon-cyan to-neon-violet py-3 text-sm font-semibold text-navy">
+        <button disabled={uploading} className="w-full rounded-xl bg-gradient-to-r from-neon-cyan to-neon-violet py-3 text-sm font-semibold text-navy disabled:opacity-60">
           Kirim Tiket
         </button>
         <p className="mt-2 text-[11px] text-dim">Tiket baru otomatis memberi notifikasi ke admin.</p>

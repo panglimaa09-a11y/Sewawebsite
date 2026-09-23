@@ -11,7 +11,7 @@ const ticketSchema = z.object({
   subject: z.string().min(4).max(120),
   category: z.enum(['general', 'payment', 'technical', 'domain']),
   message: z.string().min(5).max(2000),
-  attachment_url: z.string().url().or(z.literal('')).optional(),
+  attachment_path: z.string().max(300).optional(),
 });
 
 /** User membuat tiket (termasuk bukti pembayaran manual, PRD #20/#35). */
@@ -21,7 +21,17 @@ export async function createTicket(_prev: ActionState | null, formData: FormData
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? 'Data tiket tidak valid.' };
   }
-  const { subject, category, message, attachment_url } = parsed.data;
+  const { subject, category, message, attachment_path } = parsed.data;
+
+  // Path bukti harus di folder Storage milik user sendiri (PRD #43) —
+  // file sudah ter-upload langsung dari browser dengan RLS storage policy.
+  const attachments: { path: string }[] = [];
+  if (attachment_path && attachment_path.length > 0) {
+    if (!attachment_path.startsWith(`proofs/${user.id}/`)) {
+      return { ok: false, message: 'Path bukti tidak valid.' };
+    }
+    attachments.push({ path: attachment_path });
+  }
 
   const supabase = await createClient();
   const { data: ticket, error } = await supabase
@@ -36,7 +46,7 @@ export async function createTicket(_prev: ActionState | null, formData: FormData
     sender_id: user.id,
     is_staff: false,
     body: message,
-    attachments: attachment_url ? [{ url: attachment_url }] : [],
+    attachments,
   });
   if (e2) return { ok: false, message: e2.message };
 
