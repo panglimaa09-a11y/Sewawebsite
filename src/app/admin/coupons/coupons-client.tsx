@@ -26,6 +26,88 @@ type Redemption = {
   redeemed_at: string;
 };
 
+type DailyPoint = { date: string; count: number; discount: number };
+type TopCoupon = { coupon_id: string; count: number; discount: number };
+
+/** Grafik batang SVG penebusan harian 30 hari — tanpa dependensi. */
+function RedemptionsChart({ daily }: { daily: DailyPoint[] }) {
+  const max = Math.max(1, ...daily.map((d) => d.count));
+  const W = 640, H = 140, PAD_B = 18;
+  const bw = W / daily.length;
+  const fmtDay = (iso: string) =>
+    new Date(iso + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+  const totalRedemptions = daily.reduce((s, d) => s + d.count, 0);
+  const totalDiscount = daily.reduce((s, d) => s + d.discount, 0);
+
+  return (
+    <div className="mb-8 rounded-2xl border border-white/10 bg-navy-3/70 p-5">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-dim">
+          Penebusan 30 Hari Terakhir
+        </h2>
+        <p className="text-xs text-muted">
+          <b className="text-ink">{totalRedemptions}</b> penebusan · diskon{' '}
+          <b className="text-neon-mint">{fmtIDR(totalDiscount)}</b>
+        </p>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H + PAD_B}`} className="h-auto w-full" role="img" aria-label="Grafik penebusan kupon harian">
+        <defs>
+          <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#4DE3FF" />
+            <stop offset="100%" stopColor="#8B7CFF" />
+          </linearGradient>
+        </defs>
+        {daily.map((d, i) => {
+          const h = d.count === 0 ? 0 : Math.max(3, (d.count / max) * (H - 8));
+          const x = i * bw + bw * 0.15;
+          const y = H - h;
+          return (
+            <g key={d.date}>
+              <rect x={x} y={y} width={bw * 0.7} height={h} rx={Math.min(3, bw * 0.3)} fill="url(#barGrad)" opacity={d.count ? 1 : 0.25}>
+                <title>{`${fmtDay(d.date)}: ${d.count} penebusan (diskon ${fmtIDR(d.discount)})`}</title>
+              </rect>
+            </g>
+          );
+        })}
+        {/* garis dasar + label awal/akhir */}
+        <line x1="0" y1={H} x2={W} y2={H} stroke="rgba(140,160,220,.25)" strokeWidth="1" />
+        <text x="0" y={H + 13} fill="#5C6A93" fontSize="9">{fmtDay(daily[0].date)}</text>
+        <text x={W} y={H + 13} fill="#5C6A93" fontSize="9" textAnchor="end">{fmtDay(daily[daily.length - 1].date)}</text>
+      </svg>
+      <p className="mt-1 text-[11px] text-dim">Arahkan kursor ke batang untuk rincian harian.</p>
+    </div>
+  );
+}
+
+/** Peringkat kupon berdasarkan penebusan. */
+function TopCoupons({ top, codes }: { top: TopCoupon[]; codes: Map<string, string> }) {
+  if (top.length === 0) return null;
+  const max = Math.max(...top.map((t) => t.count));
+  return (
+    <div className="mb-8 rounded-2xl border border-white/10 bg-navy-3/70 p-5">
+      <h2 className="mb-3 font-display text-sm font-semibold uppercase tracking-wider text-dim">
+        Kupon Terpopuler
+      </h2>
+      <div className="flex flex-col gap-2.5">
+        {top.map((t) => (
+          <div key={t.coupon_id} className="flex items-center gap-3 text-sm">
+            <span className="w-32 shrink-0 truncate font-mono text-xs font-semibold">{codes.get(t.coupon_id) ?? '—'}</span>
+            <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/5">
+              <span
+                className="block h-full rounded-full bg-gradient-to-r from-neon-cyan to-neon-violet"
+                style={{ width: `${Math.max(4, (t.count / max) * 100)}%` }}
+              />
+            </span>
+            <span className="w-24 shrink-0 text-right text-xs text-muted">
+              {t.count}× · <span className="text-neon-mint">{fmtIDR(t.discount)}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const inputCls =
   'w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2.5 text-sm text-ink outline-none focus:border-neon-cyan';
 const labelCls = 'mb-1.5 block text-xs font-semibold text-muted';
@@ -66,10 +148,14 @@ export default function CouponsClient({
   coupons,
   plans,
   redemptions,
+  daily,
+  topCoupons,
 }: {
   coupons: Coupon[];
   plans: Plan[];
   redemptions: Redemption[];
+  daily: DailyPoint[];
+  topCoupons: TopCoupon[];
 }) {
   const [form, setForm] = useState<FormCoupon>(EMPTY);
   const [mode, setMode] = useState<'form' | 'list' | 'test'>('list');
@@ -399,6 +485,17 @@ export default function CouponsClient({
             <Notice state={deleteState} />
           </div>
         </div>
+      )}
+
+      {/* grafik penebusan */}
+      {mode === 'list' && (
+        <>
+          <RedemptionsChart daily={daily} />
+          <TopCoupons
+            top={topCoupons}
+            codes={new Map(coupons.map((c) => [c.id, c.code]))}
+          />
+        </>
       )}
 
       {/* penebusan terbaru */}

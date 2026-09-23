@@ -17,9 +17,47 @@ export default async function AdminCouponsPage() {
     supabase
       .from('coupon_redemptions')
       .select('id, coupon_id, user_id, discount_amount, redeemed_at')
-      .order('redeemed_at', { ascending: false })
-      .limit(50),
+      .order('redeemed_at', { ascending: false }),
   ]);
+
+  // Agregasi grafik — di server, tipe aman
+  const rows = (redemptions ?? []) as {
+    id: string;
+    coupon_id: string;
+    user_id: string;
+    discount_amount: number;
+    redeemed_at: string;
+  }[];
+
+  // Tren harian 30 hari terakhir (hari kosong = 0)
+  const days: { date: string; count: number; discount: number }[] = [];
+  const byDay = new Map<string, { count: number; discount: number }>();
+  for (const r of rows) {
+    const d = r.redeemed_at.slice(0, 10);
+    const cur = byDay.get(d) ?? { count: 0, discount: 0 };
+    cur.count++;
+    cur.discount += Number(r.discount_amount);
+    byDay.set(d, cur);
+  }
+  for (let i = 29; i >= 0; i--) {
+    const dt = new Date(Date.now() - i * 86400000);
+    const key = dt.toISOString().slice(0, 10);
+    const cur = byDay.get(key) ?? { count: 0, discount: 0 };
+    days.push({ date: key, ...cur });
+  }
+
+  // Per kupon: jumlah penebusan + total diskon
+  const perCoupon = new Map<string, { count: number; discount: number }>();
+  for (const r of rows) {
+    const cur = perCoupon.get(r.coupon_id) ?? { count: 0, discount: 0 };
+    cur.count++;
+    cur.discount += Number(r.discount_amount);
+    perCoupon.set(r.coupon_id, cur);
+  }
+  const topCoupons = [...perCoupon.entries()]
+    .map(([coupon_id, v]) => ({ coupon_id, ...v }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -31,6 +69,8 @@ export default async function AdminCouponsPage() {
         coupons={coupons ?? []}
         plans={plans ?? []}
         redemptions={redemptions ?? []}
+        daily={days}
+        topCoupons={topCoupons}
       />
     </div>
   );

@@ -106,3 +106,9 @@ subtotal/diskon/total, dan layar sukses bernomor invoice.
 Tab "Uji Validasi Kode" di `/admin/coupons`: admin mensimulasikan
 `validate_coupon` terhadap paket + periode tertentu tanpa membuat invoice —
 menampilkan verdict (valid/tidak + alasan) dan rincian subtotal/diskon/total.
+
+### Grafik Penebusan Kupon (admin)
+
+`/admin/coupons` menampilkan grafik batang SVG (tanpa dependensi) penebusan
+harian 30 hari terakhir — agregasi dihitung di server component — plus
+peringkat kupon terpopuler (jumlah + total diskon) dan tooltip per batang.
