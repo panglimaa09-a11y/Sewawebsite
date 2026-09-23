@@ -82,3 +82,21 @@ Halaman `/admin/coupons`: ringkasan (total/aktif/penebusan), form create & edit
 toggle aktif/nonaktif, dan penghapusan aman — kupon yang sudah pernah ditebus
 hanya dinonaktifkan agar riwayat transaksi tetap utuh. Semua aksi divalidasi
 Zod + `requireStaff` dan tercatat di `activity_logs`.
+
+## Checkout + Kupon (PRD #20, #22)
+
+Migrasi `00005_checkout.sql`:
+
+- `validate_coupon(code, plan_id, amount)` — security definer; cek aktif,
+  kedaluwarsa, batas pemakaian, batas paket, minimum pembayaran; mengembalikan
+  verdict + jumlah diskon (nominal tidak melebihi total). User tidak membaca
+  tabel `coupons` langsung (RLS staff-only).
+- `create_checkout(plan_id, period, coupon_code)` — satu transaksi DB:
+  subscription (jendela pembayaran 3 hari) → invoice dengan diskon →
+  payment pending → `coupon_redemptions` + increment `used_count` → audit log.
+  Webhook memperpanjang langganan penuh setelah bayar; tidak dibayar =
+  automation memindahkan ke past_due → suspended (lifecycle PRD #17).
+
+Halaman `/checkout`: pilih paket + periode (bulanan/tahunan), input kupon
+dengan validasi server-side dan pesan reason berbahasa Indonesia, ringkasan
+subtotal/diskon/total, dan layar sukses bernomor invoice.
