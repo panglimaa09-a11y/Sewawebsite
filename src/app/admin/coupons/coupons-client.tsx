@@ -1,0 +1,351 @@
+'use client';
+
+import { useActionState, useEffect, useState } from 'react';
+import { saveCoupon, toggleCoupon, deleteCoupon, type ActionState } from './actions';
+
+type Coupon = {
+  id: string;
+  code: string;
+  type: 'percentage' | 'fixed_amount';
+  value: number;
+  min_payment: number;
+  max_usage: number | null;
+  used_count: number;
+  plan_restriction: string | null;
+  expires_at: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+type Plan = { id: string; name: string };
+type Redemption = {
+  id: string;
+  coupon_id: string;
+  user_id: string;
+  discount_amount: number;
+  redeemed_at: string;
+};
+
+const inputCls =
+  'w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2.5 text-sm text-ink outline-none focus:border-neon-cyan';
+const labelCls = 'mb-1.5 block text-xs font-semibold text-muted';
+
+function fmtIDR(n: number) {
+  return 'Rp' + n.toLocaleString('id-ID');
+}
+function fmtDate(iso: string | null) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+function expired(iso: string | null) {
+  return !!iso && new Date(iso) < new Date();
+}
+
+function Notice({ state }: { state: ActionState | null }) {
+  if (!state) return null;
+  return <p className={`mt-2 text-xs ${state.ok ? 'text-neon-mint' : 'text-amber-400'}`}>{state.message}</p>;
+}
+
+type FormCoupon = Omit<Coupon, 'expires_at'> & { expires_at: string };
+
+const EMPTY: FormCoupon = {
+  id: '',
+  code: '',
+  type: 'percentage',
+  value: 10,
+  min_payment: 0,
+  max_usage: null,
+  used_count: 0,
+  plan_restriction: null,
+  expires_at: '',
+  is_active: true,
+  created_at: '',
+};
+
+export default function CouponsClient({
+  coupons,
+  plans,
+  redemptions,
+}: {
+  coupons: Coupon[];
+  plans: Plan[];
+  redemptions: Redemption[];
+}) {
+  const [form, setForm] = useState<FormCoupon>(EMPTY);
+  const [mode, setMode] = useState<'form' | 'list'>('list');
+  const [couponState, couponAction] = useActionState<ActionState | null, FormData>(saveCoupon, null);
+  const [toggleState, toggleAction] = useActionState<ActionState | null, FormData>(toggleCoupon, null);
+  const [deleteState, deleteAction] = useActionState<ActionState | null, FormData>(deleteCoupon, null);
+
+  useEffect(() => {
+    if (couponState?.ok) {
+      setMode('list');
+      setForm(EMPTY);
+    }
+  }, [couponState]);
+
+  const planName = (id: string | null) => plans.find((p) => p.id === id)?.name ?? 'Semua paket';
+  const activeCount = coupons.filter((c) => c.is_active && !expired(c.expires_at)).length;
+
+  return (
+    <div>
+      {/* ringkasan */}
+      <div className="mb-6 grid grid-cols-3 gap-3">
+        {[
+          { label: 'Total kupon', v: coupons.length },
+          { label: 'Aktif', v: activeCount },
+          { label: 'Penebusan terbaru', v: redemptions.length },
+        ].map((s) => (
+          <div key={s.label} className="rounded-2xl border border-white/10 bg-navy-3/70 p-4">
+            <b className="font-display text-2xl">{s.v}</b>
+            <p className="text-xs text-dim">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mb-4 flex gap-2">
+        <button
+          onClick={() => {
+            setForm(EMPTY);
+            setMode('form');
+          }}
+          className={`rounded-full border px-4 py-2 text-xs font-semibold ${
+            mode === 'form'
+              ? 'border-transparent bg-gradient-to-r from-neon-cyan to-neon-violet text-navy'
+              : 'border-white/20 text-muted hover:text-ink'
+          }`}
+        >
+          + Kupon Baru
+        </button>
+        <button
+          onClick={() => setMode('list')}
+          className={`rounded-full border px-4 py-2 text-xs font-semibold ${
+            mode === 'list'
+              ? 'border-transparent bg-gradient-to-r from-neon-cyan to-neon-violet text-navy'
+              : 'border-white/20 text-muted hover:text-ink'
+          }`}
+        >
+          Daftar Kupon
+        </button>
+      </div>
+
+      {/* ── FORM ── */}
+      {mode === 'form' && (
+        <form action={couponAction} key={form.id || 'new'} className="rounded-2xl border border-white/10 bg-navy-3/70 p-6">
+          {form.id && <input type="hidden" name="id" value={form.id} />}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className={labelCls} htmlFor="code">Kode</label>
+              <input
+                id="code"
+                name="code"
+                defaultValue={form.code}
+                placeholder="WELCOME50"
+                className={`${inputCls} font-mono uppercase`}
+              />
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="type">Tipe diskon</label>
+              <select
+                id="type"
+                name="type"
+                defaultValue={form.type}
+                onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as Coupon['type'] }))}
+                className={inputCls}
+              >
+                <option value="percentage">Persentase (%)</option>
+                <option value="fixed_amount">Nominal (Rp)</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="value">
+                {form.type === 'percentage' ? 'Nilai (%)' : 'Nilai (Rp)'}
+              </label>
+              <input id="value" name="value" type="number" min={1} defaultValue={form.value} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="min_payment">Minimum pembayaran (Rp, 0 = tanpa minimum)</label>
+              <input id="min_payment" name="min_payment" type="number" min={0} defaultValue={form.min_payment} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="max_usage">Maks. pemakaian (kosong = tanpa batas)</label>
+              <input
+                id="max_usage"
+                name="max_usage"
+                type="number"
+                min={1}
+                defaultValue={form.max_usage ?? ''}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="plan_restriction">Batasi ke paket</label>
+              <select id="plan_restriction" name="plan_restriction" defaultValue={form.plan_restriction ?? ''} className={inputCls}>
+                <option value="">Semua paket</option>
+                {plans.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="expires_at">Berlaku sampai</label>
+              <input
+                id="expires_at"
+                name="expires_at"
+                type="datetime-local"
+                defaultValue={form.expires_at}
+                className={inputCls}
+              />
+            </div>
+            <div className="flex items-end pb-1">
+              <label className="flex items-center gap-2 text-sm text-muted">
+                <input type="checkbox" name="is_active" defaultChecked={form.is_active} />
+                Kupon aktif
+              </label>
+            </div>
+          </div>
+          <div className="mt-6 flex gap-3">
+            <button type="submit" className="rounded-xl bg-gradient-to-r from-neon-cyan to-neon-violet px-6 py-2.5 text-sm font-semibold text-navy">
+              {form.id ? 'Simpan Perubahan' : 'Buat Kupon'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode('list');
+                setForm(EMPTY);
+              }}
+              className="rounded-xl border border-white/20 px-5 py-2.5 text-sm text-muted"
+            >
+              Batal
+            </button>
+          </div>
+          <Notice state={couponState} />
+        </form>
+      )}
+
+      {/* ── LIST ── */}
+      {mode === 'list' && (
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-navy-3/70">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-white/10 text-[11px] uppercase tracking-wider text-dim">
+                <th className="px-4 py-3">Kode</th>
+                <th className="px-4 py-3">Diskon</th>
+                <th className="px-4 py-3">Pemakaian</th>
+                <th className="px-4 py-3">Paket</th>
+                <th className="px-4 py-3">Berlaku s.d.</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {coupons.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-muted">
+                    Belum ada kupon. Buat satu dengan tombol <b>+ Kupon Baru</b>.
+                  </td>
+                </tr>
+              )}
+              {coupons.map((c) => {
+                const isExpired = expired(c.expires_at);
+                const exhausted = c.max_usage !== null && c.used_count >= c.max_usage;
+                const effective = c.is_active && !isExpired && !exhausted;
+                return (
+                  <tr key={c.id} className="border-b border-white/5 last:border-0">
+                    <td className="px-4 py-3 font-mono font-semibold">{c.code}</td>
+                    <td className="px-4 py-3">
+                      {c.type === 'percentage' ? `${c.value}%` : fmtIDR(c.value)}
+                      {c.min_payment > 0 && (
+                        <span className="block text-[11px] text-dim">min. {fmtIDR(c.min_payment)}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {c.used_count}
+                      {c.max_usage !== null && <span className="text-dim"> / {c.max_usage}</span>}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted">{planName(c.plan_restriction)}</td>
+                    <td className="px-4 py-3 text-xs">{fmtDate(c.expires_at)}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                          effective ? 'bg-neon-mint/10 text-neon-mint' : 'bg-white/5 text-dim'
+                        }`}
+                      >
+                        {isExpired ? 'Kedaluwarsa' : exhausted ? 'Habis' : c.is_active ? 'Aktif' : 'Nonaktif'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => {
+                            setForm({ ...c, expires_at: c.expires_at ? c.expires_at.slice(0, 16) : '' });
+                            setMode('form');
+                          }}
+                          className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-muted hover:text-ink"
+                        >
+                          Edit
+                        </button>
+                        <form action={toggleAction}>
+                          <input type="hidden" name="id" value={c.id} />
+                          <input type="hidden" name="next_active" value={c.is_active ? 'false' : 'true'} />
+                          <button className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-muted hover:text-ink">
+                            {c.is_active ? 'Nonaktifkan' : 'Aktifkan'}
+                          </button>
+                        </form>
+                        <form action={deleteAction}>
+                          <input type="hidden" name="id" value={c.id} />
+                          <button className="rounded-lg border border-rose-400/30 px-3 py-1.5 text-xs text-rose-300 hover:bg-rose-400/10">
+                            Hapus
+                          </button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="px-4 py-3">
+            <Notice state={toggleState} />
+            <Notice state={deleteState} />
+          </div>
+        </div>
+      )}
+
+      {/* penebusan terbaru */}
+      {redemptions.length > 0 && (
+        <div className="mt-8">
+          <h2 className="mb-3 font-display text-sm font-semibold uppercase tracking-wider text-dim">
+            Penebusan Terbaru
+          </h2>
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-navy-3/70">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-[11px] uppercase tracking-wider text-dim">
+                  <th className="px-4 py-3">Kupon</th>
+                  <th className="px-4 py-3">User</th>
+                  <th className="px-4 py-3">Diskon</th>
+                  <th className="px-4 py-3">Tanggal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {redemptions.slice(0, 10).map((r) => (
+                  <tr key={r.id} className="border-b border-white/5 last:border-0">
+                    <td className="px-4 py-2.5 font-mono text-xs">
+                      {coupons.find((c) => c.id === r.coupon_id)?.code ?? r.coupon_id.slice(0, 8)}
+                    </td>
+                    <td className="px-4 py-2.5 font-mono text-xs text-muted">{r.user_id.slice(0, 8)}…</td>
+                    <td className="px-4 py-2.5">{fmtIDR(r.discount_amount)}</td>
+                    <td className="px-4 py-2.5 text-xs text-muted">{fmtDate(r.redeemed_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

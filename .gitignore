@@ -1,0 +1,10 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+.env.production
+*.tsbuildinfo
+.vercel
+supabase/.temp/
+.DS_Store
