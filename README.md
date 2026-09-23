@@ -143,3 +143,18 @@ PNG/JPG/WebP) + RLS storage policy — user hanya bisa upload/baca/hapus di
 folder `{user_id}/…`, staff bisa membaca semua untuk verifikasi. Upload
 langsung dari browser (`/app/support`), path disimpan di lampiran tiket;
 user & admin melihat bukti via signed URL 1 jam yang dibuat server-side.
+
+## Troubleshooting: Login "memuat" terus / tidak masuk
+
+1. **Loading abadi di tombol Masuk** → diperbaiki: form kini try/finally
+   (loading selalu mati) + error ditampilkan jelas. Penyebab paling umum:
+   env `NEXT_PUBLIC_SUPABASE_URL`/`ANON_KEY` belum terisi di Vercel.
+2. **"Email belum dikonfirmasi"** → Supabase mengaktifkan konfirmasi email
+   secara default. Dua pilihan:
+   - Development / segera aktif: Dashboard → Authentication → Sign In /
+     Providers → Email → matikan **Confirm email**; ATAU
+   - Biarkan aktif: user klik tautan di inbox. Redirect konfirmasi diarahkan
+     ke `{SITE_URL}/auth/callback` (route sudah tersedia) — daftarkan URL itu
+     di **Authentication → URL Configuration → Redirect URLs**.
+3. Setelah mengisi/mengubah env di Vercel → **Redeploy** (env baru hanya
+   aktif saat deploy ulang).

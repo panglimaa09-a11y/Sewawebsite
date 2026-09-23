@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import { friendlyAuthError } from './login-form';
 
 /** Form register — Supabase Auth (PRD #9): nama, email, password. */
 export default function RegisterForm() {
@@ -17,19 +18,32 @@ export default function RegisterForm() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName } },
-    });
-    setLoading(false);
-    if (error) {
-      setError(error.message);
-      return;
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: fullName } },
+      });
+      if (error) {
+        setError(friendlyAuthError(error.message));
+        return;
+      }
+      if (data.session) {
+        // Konfirmasi email nonaktif → langsung lanjut
+        router.push('/checkout');
+        router.refresh();
+        return;
+      }
+      // Konfirmasi email aktif → session null
+      setError(
+        'Pendaftaran berhasil! Cek inbox/spam Anda dan klik tautan konfirmasi untuk mengaktifkan akun, lalu masuk.'
+      );
+    } catch (e) {
+      setError(friendlyAuthError(e instanceof Error ? e.message : 'Terjadi kesalahan.'));
+    } finally {
+      setLoading(false);
     }
-    router.push('/checkout'); // lanjut pilih paket (PRD #1 flow)
-    router.refresh();
   }
 
   return (
@@ -44,7 +58,7 @@ export default function RegisterForm() {
       <input id="password" type="password" required minLength={8} value={password}
         onChange={(e) => setPassword(e.target.value)}
         className="rounded-xl border border-white/20 bg-white/5 px-4 py-3 outline-none focus:border-neon-cyan" />
-      {error && <p className="text-sm text-rose-400">{error}</p>}
+      {error && <p className="rounded-xl border border-neon-cyan/30 bg-neon-cyan/5 px-4 py-3 text-sm text-muted">{error}</p>}
       <button disabled={loading} type="submit"
         className="rounded-xl bg-gradient-to-r from-neon-cyan to-neon-violet py-3 font-semibold text-navy disabled:opacity-60">
         {loading ? 'Membuat akun…' : 'Daftar Sekarang'}
