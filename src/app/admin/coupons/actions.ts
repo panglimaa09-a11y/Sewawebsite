@@ -5,7 +5,11 @@ import { z } from 'zod';
 import { requireStaff } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 
-export type ActionState = { ok: boolean; message: string };
+export type ActionState = {
+  ok: boolean;
+  message: string;
+  data?: { base?: number; discount?: number; total?: number };
+};
 
 /**
  * Kelola kupon (PRD #22). Role: admin/super_admin/finance (RLS staff policy
@@ -167,4 +171,53 @@ export async function deleteCoupon(_prev: ActionState | null, formData: FormData
 
   revalidatePath('/admin/coupons');
   return { ok: true, message: 'Kupon dihapus.' };
+}
+/** Simulasi validasi kode (PRD #22) — admin cek kode tanpa checkout nyata. */
+export async function testCoupon(_prev: ActionState | null, formData: FormData): Promise<ActionState> {
+  await requireStaff('/admin/coupons');
+  const code = String(formData.get('test_code') ?? '').trim().toUpperCase();
+  const planId = String(formData.get('test_plan') ?? '');
+  const period = String(formData.get('test_period') ?? 'monthly') === 'yearly' ? 'yearly' : 'monthly';
+  if (!code) return { ok: false, message: 'Masukkan kode yang mau diuji.' };
+  if (!planId) return { ok: false, message: 'Pilih paket untuk simulasi.' };
+
+  const supabase = await createClient();
+  const { data: plan } = await supabase
+    .from('plans')
+    .select('name, price_monthly, price_yearly')
+    .eq('id', planId)
+    .single();
+  if (!plan) return { ok: false, message: 'Paket tidak ditemukan.' };
+
+  const base =
+    period === 'yearly' ? (plan.price_yearly ?? plan.price_monthly * 12) : plan.price_monthly;
+
+  const { data, error } = await supabase.rpc('validate_coupon', {
+    p_code: code,
+    p_plan_id: planId,
+    p_amount: base,
+  });
+  if (error) return { ok: false, message: error.message };
+
+  const r = data as {
+    valid: boolean;
+    reason?: string;
+    discount?: number;
+    min_payment?: number;
+    type?: string;
+    value?: number;
+  };
+  if (!r.valid) {
+    const msg =
+      r.reason === 'min_payment' && r.min_payment
+        ? `TIDAK VALID — minimum pembayaran Rp${Number(r.min_payment).toLocaleString('id-ID')} belum terpenuhi (total simulasi Rp${base.toLocaleString('id-ID')}).`
+        : `TIDAK VALID — ${r.reason ?? 'alasan tidak diketahui'}.`;
+    return { ok: false, message: msg, data: { base, discount: 0, total: base } };
+  }
+
+  return {
+    ok: true,
+    message: `VALID — diskon ${r.type === 'percentage' ? `${r.value}%` : `Rp${Number(r.value).toLocaleString('id-ID')}`} diterapkan.`,
+    data: { base, discount: Number(r.discount), total: base - Number(r.discount) },
+  };
 }

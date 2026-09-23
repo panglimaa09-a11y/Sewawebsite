@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState, useEffect, useState } from 'react';
-import { saveCoupon, toggleCoupon, deleteCoupon, type ActionState } from './actions';
+import { saveCoupon, toggleCoupon, deleteCoupon, testCoupon, type ActionState } from './actions';
 
 type Coupon = {
   id: string;
@@ -72,10 +72,12 @@ export default function CouponsClient({
   redemptions: Redemption[];
 }) {
   const [form, setForm] = useState<FormCoupon>(EMPTY);
-  const [mode, setMode] = useState<'form' | 'list'>('list');
+  const [mode, setMode] = useState<'form' | 'list' | 'test'>('list');
   const [couponState, couponAction] = useActionState<ActionState | null, FormData>(saveCoupon, null);
   const [toggleState, toggleAction] = useActionState<ActionState | null, FormData>(toggleCoupon, null);
   const [deleteState, deleteAction] = useActionState<ActionState | null, FormData>(deleteCoupon, null);
+  const [testState, testAction] = useActionState<ActionState | null, FormData>(testCoupon, null);
+  const [testCode, setTestCode] = useState('');
 
   useEffect(() => {
     if (couponState?.ok) {
@@ -127,7 +129,92 @@ export default function CouponsClient({
         >
           Daftar Kupon
         </button>
+        <button
+          onClick={() => setMode('test')}
+          className={`rounded-full border px-4 py-2 text-xs font-semibold ${
+            mode === 'test'
+              ? 'border-transparent bg-gradient-to-r from-neon-cyan to-neon-violet text-navy'
+              : 'border-white/20 text-muted hover:text-ink'
+          }`}
+        >
+          Uji Validasi Kode
+        </button>
       </div>
+
+      {/* ── UJI VALIDASI KODE ── */}
+      {mode === 'test' && (
+        <form action={testAction} className="rounded-2xl border border-white/10 bg-navy-3/70 p-6">
+          <p className="mb-4 text-xs text-dim">
+            Simulasi lewat fungsi <code className="font-mono text-neon-cyan">validate_coupon</code> — sama seperti
+            alur checkout nyata, tetapi tidak membuat invoice atau menghitung pemakaian.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label className={labelCls} htmlFor="test_code">Kode</label>
+              <input
+                id="test_code"
+                name="test_code"
+                value={testCode}
+                onChange={(e) => setTestCode(e.target.value.toUpperCase())}
+                placeholder="WELCOME50"
+                className={`${inputCls} font-mono uppercase`}
+              />
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="test_plan">Paket</label>
+              <select id="test_plan" name="test_plan" defaultValue={plans[0]?.id ?? ''} className={inputCls}>
+                {plans.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="test_period">Periode</label>
+              <select id="test_period" name="test_period" className={inputCls}>
+                <option value="monthly">Bulanan</option>
+                <option value="yearly">Tahunan</option>
+              </select>
+            </div>
+          </div>
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <button type="submit" className="rounded-xl bg-gradient-to-r from-neon-cyan to-neon-violet px-6 py-2.5 text-sm font-semibold text-navy">
+              Cek Kode
+            </button>
+            {/* quick-fill dari daftar kupon */}
+            <span className="flex flex-wrap gap-1.5">
+              {coupons.slice(0, 6).map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setTestCode(c.code)}
+                  className="rounded-lg border border-white/15 px-2.5 py-1.5 font-mono text-[11px] text-muted hover:text-ink"
+                >
+                  {c.code}
+                </button>
+              ))}
+            </span>
+          </div>
+          <Notice state={testState} />
+          {testState?.data && (
+            <div className="mt-4 grid grid-cols-3 gap-3 border-t border-white/10 pt-4 text-sm">
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-dim">Subtotal</p>
+                <b className="font-display">{fmtIDR(testState.data.base ?? 0)}</b>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-dim">Diskon</p>
+                <b className={`font-display ${testState.ok ? 'text-neon-mint' : ''}`}>
+                  {testState.ok ? `−${fmtIDR(testState.data.discount ?? 0)}` : 'Rp0'}
+                </b>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-dim">Total setelah kupon</p>
+                <b className="font-display">{fmtIDR(testState.data.total ?? 0)}</b>
+              </div>
+            </div>
+          )}
+        </form>
+      )}
 
       {/* ── FORM ── */}
       {mode === 'form' && (

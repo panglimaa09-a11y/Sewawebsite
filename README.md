@@ -100,3 +100,9 @@ Migrasi `00005_checkout.sql`:
 Halaman `/checkout`: pilih paket + periode (bulanan/tahunan), input kupon
 dengan validasi server-side dan pesan reason berbahasa Indonesia, ringkasan
 subtotal/diskon/total, dan layar sukses bernomor invoice.
+
+### Uji Validasi Kode (admin)
+
+Tab "Uji Validasi Kode" di `/admin/coupons`: admin mensimulasikan
+`validate_coupon` terhadap paket + periode tertentu tanpa membuat invoice —
+menampilkan verdict (valid/tidak + alasan) dan rincian subtotal/diskon/total.
