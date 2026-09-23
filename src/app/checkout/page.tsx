@@ -12,11 +12,18 @@ export default async function CheckoutPage({
   await requireUser('/checkout');
   const { plan } = await searchParams;
   const supabase = await createClient();
-  const { data: plans } = await supabase
-    .from('plans')
-    .select('id, name, description, price_monthly, price_yearly')
-    .eq('is_active', true)
-    .order('sort_order');
+  const [{ data: plans }, { data: settings }] = await Promise.all([
+    supabase
+      .from('plans')
+      .select('id, name, description, price_monthly, price_yearly')
+      .eq('is_active', true)
+      .order('sort_order'),
+    supabase
+      .from('system_settings')
+      .select('manual_payment_enabled, manual_bank_name, manual_account_number, manual_account_holder, manual_instructions')
+      .limit(1)
+      .single(),
+  ]);
 
   return (
     <main className="min-h-screen bg-navy p-8">
@@ -25,7 +32,17 @@ export default async function CheckoutPage({
         <p className="mt-2 mb-8 text-muted">
           Pilih paket dan periode, terapkan kupon bila ada, lalu bayar.
         </p>
-        <CheckoutClient plans={plans ?? []} defaultPlanId={plan ?? null} />
+        <CheckoutClient
+          plans={plans ?? []}
+          defaultPlanId={plan ?? null}
+          manual={{
+            enabled: settings?.manual_payment_enabled ?? false,
+            bank: settings?.manual_bank_name ?? 'Bank Transfer',
+            account: settings?.manual_account_number ?? '',
+            holder: settings?.manual_account_holder ?? '',
+            instructions: settings?.manual_instructions ?? '',
+          }}
+        />
       </div>
     </main>
   );

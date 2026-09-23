@@ -34,9 +34,11 @@ function Notice({ state }: { state: ActionState | null }) {
 export default function CheckoutClient({
   plans,
   defaultPlanId,
+  manual,
 }: {
   plans: PlanOption[];
   defaultPlanId: string | null;
+  manual: { enabled: boolean; bank: string; account: string; holder: string; instructions: string };
 }) {
   const [planId, setPlanId] = useState<string>(defaultPlanId ?? plans[0]?.id ?? '');
   const [period, setPeriod] = useState<Period>('monthly');
@@ -83,12 +85,31 @@ export default function CheckoutClient({
           Invoice <b className="font-mono text-ink">{checkoutState.data?.invoiceNumber}</b> menunggu pembayaran
           sebesar <b className="text-ink">{fmt(checkoutState.data?.total ?? 0)}</b>.
         </p>
-        <p className="mt-4 text-xs text-dim">
-          Langkah berikutnya: arahkan ke halaman pembayaran payment gateway (Snap/Invoice URL) —
-          integrasi gateway menyusul. Setelah pembayaran terverifikasi webhook, langganan dan website
-          Anda aktif otomatis.
-        </p>
-        <a href="/app/billing" className="mt-6 inline-block rounded-xl border border-white/20 px-6 py-2.5 text-sm text-muted hover:text-ink">
+
+        {manual.enabled && (
+          <div className="mt-5 rounded-xl border border-dashed border-neon-cyan/40 bg-neon-cyan/5 p-4 text-left text-sm">
+            <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-neon-cyan">Instruksi Pembayaran</p>
+            <p className="text-muted">{manual.instructions}</p>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white/5 px-3 py-2.5">
+              <div>
+                <b className="font-display">{manual.bank}</b>
+                <p className="font-mono text-base text-ink">{manual.account}</p>
+                <p className="text-xs text-dim">a/n {manual.holder}</p>
+              </div>
+              <b className="font-display text-lg">{fmt(checkoutState.data?.total ?? 0)}</b>
+            </div>
+            <a
+              href={`/app/support?prefill=${encodeURIComponent('Bukti Pembayaran ' + (checkoutState.data?.invoiceNumber ?? ''))}`}
+              className="mt-3 block w-full rounded-xl bg-gradient-to-r from-neon-cyan to-neon-violet py-2.5 text-center text-sm font-semibold text-navy"
+            >
+              Kirim Bukti via Support
+            </a>
+            <p className="mt-2 text-center text-[11px] text-dim">
+              Admin memverifikasi bukti Anda, lalu langganan aktif otomatis.
+            </p>
+          </div>
+        )}
+        <a href="/app/billing" className="mt-5 inline-block rounded-xl border border-white/20 px-6 py-2.5 text-sm text-muted hover:text-ink">
           Lihat tagihan di Billing
         </a>
       </div>
@@ -218,8 +239,8 @@ export default function CheckoutClient({
         </button>
         <Notice state={checkoutState} />
         <p className="mt-3 text-center text-[11px] text-dim">
-          Pembayaran diproses via payment gateway. Status tidak pernah diubah dari browser —
-          hanya webhook terverifikasi (PRD #20).
+          Pembayaran manual — transfer lalu kirim bukti via Support. Status diverifikasi admin
+          (server-side, PRD #20).
         </p>
       </form>
     </div>

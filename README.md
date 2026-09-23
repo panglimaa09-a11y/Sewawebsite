@@ -112,3 +112,26 @@ menampilkan verdict (valid/tidak + alasan) dan rincian subtotal/diskon/total.
 `/admin/coupons` menampilkan grafik batang SVG (tanpa dependensi) penebusan
 harian 30 hari terakhir — agregasi dihitung di server component — plus
 peringkat kupon terpopuler (jumlah + total diskon) dan tooltip per batang.
+
+## Pembayaran Manual (PRD #20 — fase tanpa payment gateway)
+
+Migrasi `00006_manual_payment.sql`:
+
+- `system_settings` + kolom instruksi manual (bank, nomor rekening, a/n,
+  instruksi) — nilai awal DANA 082336939662 a/n Angga Bayu Setyawan;
+  diubah admin dari `/admin/settings` (tabel system_settings).
+- `create_checkout()` kini membuat payment dengan gateway `manual`.
+- Trigger `ticket_created_notify` — tiket baru = notifikasi broadcast ke staff.
+- `verify_manual_payment(payment_id, note)` — security definer dengan cek
+  `is_staff()`; satu-satunya jalur yang melunasi payment: update payment →
+  invoice → perpanjang subscription + website → notifikasi user (template
+  PRD #34) → audit log.
+
+Alur user: checkout → invoice + instruksi transfer → tombol "Kirim Bukti via
+Support" membuka tiket berkategori payment (subjek otomatis berisi nomor
+invoice, tempel URL gambar bukti). Alur admin: `/admin/tickets` → panel
+"Pembayaran Manual Menunggu Verifikasi" → tombol Verifikasi Diterima.
+
+Saat gateway provider nanti diaktifkan, webhook `route.ts` yang ada tetap
+kompatibel (gateway_ref unik); cukup kembalikan create_checkout ke gateway
+provider + buat Snap/Invoice URL.
